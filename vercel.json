@@ -1,0 +1,64 @@
+{
+  "version": 2,
+  "name": "google-sheets-cerebras-integration",
+  "builds": [
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "functions": {
+    "api/rewrite.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "api/health.ts": {
+      "maxDuration": 5,
+      "memory": 128
+    }
+  },
+  "env": {
+    "CEREBRAS_API_KEY": "@cerebras-api-key",
+    "NODE_ENV": "production",
+    "API_TIMEOUT": "30000",
+    "MAX_RETRIES": "3",
+    "RATE_LIMIT_WINDOW_MS": "60000",
+    "RATE_LIMIT_MAX_REQUESTS": "100",
+    "CEREBRAS_MODEL": "llama3.1-8b",
+    "CEREBRAS_TEMPERATURE": "0.7",
+    "CEREBRAS_MAX_TOKENS": "1000"
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://script.google.com"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/health",
+      "dest": "/api/health.ts"
+    },
+    {
+      "src": "/api/rewrite",
+      "dest": "/api/rewrite.ts"
+    }
+  ]
+}

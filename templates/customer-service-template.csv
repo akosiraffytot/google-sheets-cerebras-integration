@@ -1,0 +1,9 @@
+Customer Name,Issue Category,Original Message,Response Type,AI-Generated Response,Follow-up Required
+John Smith,Billing,"My bill seems wrong this month, it's way higher than usual",Professional and Helpful,"=REWRITE(""Create a professional and helpful customer service response"", C2)",Yes
+Sarah Johnson,Product Support,"The software keeps crashing when I try to export data",Technical Support,"=REWRITE(""Create a technical support response with troubleshooting steps"", C3)",Yes
+Mike Davis,General Inquiry,"Do you offer discounts for non-profits?",Informative,"=REWRITE(""Create an informative response about pricing options"", C4)",No
+Lisa Chen,Complaint,"I'm very frustrated with the slow response time from your team",Empathetic Apology,"=REWRITE(""Create an empathetic apology and solution"", C5)",Yes
+Robert Wilson,Feature Request,"Can you add a dark mode to the app?",Acknowledgment,"=REWRITE(""Create a response acknowledging the feature request"", C6)",No
+Emma Brown,Refund Request,"I want to cancel my subscription and get a refund",Policy Explanation,"=REWRITE(""Create a helpful response explaining refund policy"", C7)",Yes
+David Lee,Technical Issue,"I can't log into my account, forgot my password",Step-by-step Help,"=REWRITE(""Create step-by-step password reset instructions"", C8)",No
+Jennifer Taylor,Praise,"Your customer service team was amazing, thank you!",Grateful Response,"=REWRITE(""Create a grateful response to positive feedback"", C9)",No

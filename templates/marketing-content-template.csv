@@ -1,0 +1,9 @@
+Campaign,Product/Service,Target Audience,Content Type,Original Content,Optimized Content,Platform,Call to Action
+Q4 Launch,Project Management Software,Small Business Owners,Email Subject,"New software available","=REWRITE(""Create compelling email subject for small business owners"", E2)",Email,Sign up for free trial
+Q4 Launch,Project Management Software,Small Business Owners,Email Body,"Our new project management tool helps organize tasks","=REWRITE(""Write engaging email body for small business owners highlighting benefits"", E3)",Email,Start your free trial today
+Social Media,Cloud Storage Service,Remote Workers,Instagram Post,"Secure cloud storage for your files","=REWRITE(""Create engaging Instagram post with emojis for remote workers"", E4)",Instagram,Link in bio
+Social Media,Cloud Storage Service,Remote Workers,LinkedIn Post,"Secure cloud storage for your files","=REWRITE(""Create professional LinkedIn post for remote workers"", E5)",LinkedIn,Learn more
+Blog Content,Cybersecurity Software,IT Managers,Blog Title,"How to Protect Your Company Data","=REWRITE(""Create SEO-friendly blog title for IT managers"", E6)",Blog,Read full article
+Blog Content,Cybersecurity Software,IT Managers,Meta Description,"Learn about data protection strategies","=REWRITE(""Write compelling meta description for cybersecurity blog"", E7)",Blog,
+Product Launch,Mobile App,Millennials,Press Release,"New mobile app launched with innovative features","=REWRITE(""Create exciting press release for millennial audience"", E8)",Press,Download now
+Webinar,Analytics Platform,Data Scientists,Webinar Title,"Understanding Data Analytics Trends","=REWRITE(""Create compelling webinar title for data scientists"", E9)",Webinar,Register free

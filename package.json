@@ -1,0 +1,51 @@
+{
+  "name": "google-sheets-cerebras-integration",
+  "version": "1.0.0",
+  "description": "Google Sheets integration with Cerebras AI for text rewriting",
+  "main": "api/rewrite.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc",
+    "build:netlify": "npm run type-check && tsc && npm run build:functions",
+    "build:functions": "tsc netlify/functions/*.ts --outDir netlify/functions --target ES2020 --module commonjs --moduleResolution node --esModuleInterop",
+    "test": "jest",
+    "type-check": "tsc --noEmit",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel",
+    "deploy:netlify": "netlify deploy --prod",
+    "deploy:netlify:preview": "netlify deploy",
+    "vercel:build": "npm run type-check && npm run build",
+    "vercel:dev": "vercel dev --listen 3000",
+    "netlify:dev": "netlify dev"
+  },
+  "dependencies": {
+    "@cerebras/cerebras_cloud_sdk": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^2.0.0",
+    "@types/cors": "^2.8.13",
+    "@types/express": "^4.17.17",
+    "@types/jest": "^29.5.5",
+    "@types/node": "^20.5.0",
+    "@vercel/node": "^3.0.0",
+    "jest": "^29.6.2",
+    "netlify-cli": "^17.0.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.1.6",
+    "vercel": "^32.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "google-sheets",
+    "cerebras",
+    "ai",
+    "text-rewriting",
+    "serverless"
+  ],
+  "author": "",
+  "license": "MIT"
+}

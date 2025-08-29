@@ -1,0 +1,45 @@
+[build]
+  functions = "netlify/functions"
+  publish = "dist"
+  command = "npm run build:netlify"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--production=false"
+
+[context.production.environment]
+  NODE_ENV = "production"
+
+[context.deploy-preview.environment]
+  NODE_ENV = "development"
+
+[context.branch-deploy.environment]
+  NODE_ENV = "development"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "https://script.google.com"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[redirects]]
+  from = "/api/rewrite"
+  to = "/.netlify/functions/rewrite"
+  status = 200
+
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@cerebras/cerebras_cloud_sdk"]
+
+[functions."rewrite"]
+  timeout = 30
+
+[functions."health"]
+  timeout = 5

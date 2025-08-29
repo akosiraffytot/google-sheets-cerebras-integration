@@ -1,0 +1,9 @@
+Communication Type,Recipient,Context,Original Message,Professional Version,Tone,Urgency Level
+Meeting Follow-up,Team Members,Project Status,"We talked about the budget stuff and need to get it done by Friday","=REWRITE(""Create professional meeting follow-up for team"", D2)",Professional,Medium
+Client Update,External Client,Project Delay,"The project is running behind schedule due to some issues","=REWRITE(""Create diplomatic client update about delays"", D3)",Diplomatic,High
+Internal Memo,All Staff,Policy Change,"New policy starts Monday, everyone needs to follow it","=REWRITE(""Create clear internal memo about policy change"", D4)",Clear,Medium
+Vendor Communication,Supplier,Payment Terms,"We need to discuss changing our payment schedule","=REWRITE(""Create professional vendor communication about payment terms"", D5)",Professional,Low
+Performance Review,Employee,Feedback Session,"You're doing okay but could improve in some areas","=REWRITE(""Create constructive performance feedback"", D6)",Constructive,Low
+Board Presentation,Board Members,Quarterly Results,"Sales were good this quarter, expenses were higher than expected","=REWRITE(""Create executive summary for board presentation"", D7)",Executive,High
+Customer Announcement,All Customers,Service Update,"We're making some changes to our service that will affect you","=REWRITE(""Create customer-friendly service announcement"", D8)",Friendly,Medium
+Partnership Proposal,Potential Partner,Business Opportunity,"We think we could work together on some projects","=REWRITE(""Create compelling partnership proposal"", D9)",Compelling,Medium

@@ -1,12 +1,5 @@
 {
   "version": 2,
-  "name": "google-sheets-cerebras-integration",
-  "builds": [
-    {
-      "src": "api/**/*.ts",
-      "use": "@vercel/node"
-    }
-  ],
   "functions": {
     "api/rewrite.ts": {
       "maxDuration": 30,
@@ -49,16 +42,6 @@
           "value": "no-cache, no-store, must-revalidate"
         }
       ]
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/health",
-      "dest": "/api/health.ts"
-    },
-    {
-      "src": "/api/rewrite",
-      "dest": "/api/rewrite.ts"
     }
   ]
 }

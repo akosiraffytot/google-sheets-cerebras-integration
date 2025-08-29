@@ -17,7 +17,7 @@ A complete integration system that allows users to process data from Google Shee
 
 ### 1. Clone and Install
 ```bash
-git clone <repository-url>
+git clone https://github.com/akosiraffytot/google-sheets-cerebras-integration
 cd google-sheets-cerebras-integration
 npm install
 ```

@@ -408,11 +408,10 @@ function callBackendApi(prompt, mainText, contextText) {
  */
 function getApiEndpoint() {
   const properties = PropertiesService.getScriptProperties();
-  let apiUrl = properties.getProperty('API_ENDPOINT');
+  const apiUrl = properties.getProperty('API_ENDPOINT');
   
   if (!apiUrl) {
-    apiUrl = 'https://your-deployment-url.netlify.app/api/rewrite';
-    console.warn('API_ENDPOINT not configured in script properties. Please run configureApiEndpoint() first.');
+    throw new Error('API_ENDPOINT not configured. Please run configureApiEndpoint() first with your deployment URL.');
   }
   
   return apiUrl;
@@ -635,12 +634,20 @@ function getSystemStatus() {
  * Replace the URL with your actual deployment URL
  */
 function configureApiEndpoint() {
-  // Replace this URL with your actual deployment URL (Vercel or Netlify)
-  const apiUrl = 'https://your-deployment-url.vercel.app/api/rewrite';
+  // REPLACE THIS URL with your actual deployment URL:
+  // For Vercel: https://your-project-name.vercel.app/api/rewrite
+  // For Netlify: https://your-site-name.netlify.app/api/rewrite
+  const apiUrl = 'REPLACE_WITH_YOUR_ACTUAL_URL';
+  
+  if (apiUrl === 'REPLACE_WITH_YOUR_ACTUAL_URL') {
+    console.error('Please update the apiUrl in configureApiEndpoint() function with your actual deployment URL');
+    return '❌ Please update the apiUrl in configureApiEndpoint() function with your actual deployment URL';
+  }
+  
   setApiEndpoint(apiUrl);
   
   console.log('API endpoint configured successfully');
-  return 'API endpoint configured! Update the URL in this function with your actual deployment URL.';
+  return '✅ API endpoint configured successfully!';
 }
 
 /**

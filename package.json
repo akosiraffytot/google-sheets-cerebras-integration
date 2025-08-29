@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vercel dev",
     "build": "tsc",
-    "build:netlify": "npm run type-check && tsc && npm run build:functions",
-    "build:functions": "tsc netlify/functions/*.ts --outDir netlify/functions --target ES2020 --module commonjs --moduleResolution node --esModuleInterop",
+    "build:netlify": "npm run type-check",
+    "build:functions": "echo 'Netlify functions will be built automatically'",
     "test": "jest",
     "type-check": "tsc --noEmit",
     "deploy": "vercel --prod",

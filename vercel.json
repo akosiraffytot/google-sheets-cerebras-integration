@@ -1,5 +1,6 @@
 {
-  "version": 2,
+  "buildCommand": "echo 'No build needed for API-only project'",
+  "outputDirectory": "public",
   "functions": {
     "api/rewrite.ts": {
       "maxDuration": 30,
@@ -11,7 +12,6 @@
     }
   },
   "env": {
-    "CEREBRAS_API_KEY": "@cerebras-api-key",
     "NODE_ENV": "production",
     "API_TIMEOUT": "30000",
     "MAX_RETRIES": "3",
@@ -42,6 +42,12 @@
           "value": "no-cache, no-store, must-revalidate"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     }
   ]
 }

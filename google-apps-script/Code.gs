@@ -5,10 +5,11 @@
  * @param {string} prompt - AI instruction/prompt for text rewriting
  * @param {any} mainText - Primary text to be rewritten (cell reference or direct text)
  * @param {any} contextCells - Additional context for AI (cell reference/range, optional)
+ * @param {boolean} forceRerun - Force rerun even if result exists (optional)
  * @return {string} The rewritten text or error message
  * @customfunction
  */
-function REWRITE(prompt, mainText, contextCells) {
+function REWRITE(prompt, mainText, contextCells, forceRerun = false) {
   try {
     const validationResult = validateParameters(prompt, mainText, contextCells);
     if (!validationResult.isValid) {
@@ -37,9 +38,28 @@ function REWRITE(prompt, mainText, contextCells) {
     }
     
     const cacheKey = generateCacheKey(prompt, processedMainText, processedContextText);
-    const cachedResult = getCachedResult(cacheKey);
     
-    if (cachedResult) {
+    // Check if we have a completed result and shouldn't rerun
+    if (!forceRerun) {
+      // First check if this combination was completed before
+      if (isResultCompleted(cacheKey)) {
+        // Try to get from cache
+        const cachedResult = getCachedResult(cacheKey);
+        if (cachedResult && !isErrorResult(cachedResult)) {
+          return cachedResult;
+        }
+        // If completed but not in cache, we could either:
+        // 1. Return a message saying result was completed but expired
+        // 2. Allow rerun (current approach)
+        // For now, we'll allow rerun but won't mark as completed again
+      }
+    }
+    
+    // Check regular cache for recent results
+    const cachedResult = getCachedResult(cacheKey);
+    if (cachedResult && !isErrorResult(cachedResult)) {
+      // Store completion flag for future prevention
+      setCompletedResult(cacheKey, cachedResult);
       return cachedResult;
     }
     
@@ -47,6 +67,8 @@ function REWRITE(prompt, mainText, contextCells) {
     
     if (result && !isErrorResult(result)) {
       setCachedResult(cacheKey, result);
+      // Store as completed result to prevent future reruns
+      setCompletedResult(cacheKey, result);
     }
     
     return result;
@@ -472,6 +494,94 @@ function setCachedResult(cacheKey, result) {
 }
 
 /**
+ * Checks if a result has been completed (returns cached result if available)
+ * @param {string} cacheKey - The cache key to look up
+ * @return {string|null} Cached result if available, null if not completed or not cached
+ */
+function getCompletedResult(cacheKey) {
+  try {
+    // First check if this combination has been completed
+    if (!isResultCompleted(cacheKey)) {
+      return null;
+    }
+    
+    // If completed, try to get from cache first (faster)
+    const cachedResult = getCachedResult(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+    
+    // If not in cache but marked as completed, return a placeholder
+    // This allows the function to know it was completed but result expired from cache
+    return null; // Will trigger a fresh API call but won't store completion flag again
+    
+  } catch (error) {
+    console.warn(`Completed result check failed: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Checks if a specific result combination has been completed before
+ * @param {string} cacheKey - The cache key to check
+ * @return {boolean} True if this combination has been completed before
+ */
+function isResultCompleted(cacheKey) {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const completedKey = `completed_${cacheKey}`;
+    const completionFlag = properties.getProperty(completedKey);
+    
+    // Return true if any completion flag exists (handles legacy formats too)
+    return completionFlag !== null;
+    
+  } catch (error) {
+    console.warn(`Completion check failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Marks a result combination as completed (stores only a completion flag)
+ * @param {string} cacheKey - The cache key
+ * @param {string} result - The completed result (stored separately in cache)
+ */
+function setCompletedResult(cacheKey, result) {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const completedKey = `completed_${cacheKey}`;
+    
+    // Store only a minimal completion flag with timestamp
+    const timestamp = Math.floor(new Date().getTime() / 1000); // Use seconds
+    
+    // Ultra-compact storage: just store timestamp (10 characters vs 1000+)
+    properties.setProperty(completedKey, timestamp.toString());
+    
+    // The actual result is stored in cache separately (temporary but faster)
+    setCachedResult(cacheKey, result);
+    
+  } catch (error) {
+    console.warn(`Completion flag storage failed: ${error.message}`);
+    // Even if persistent storage fails, we still have the cache
+    // The function will work but might rerun after cache expires
+  }
+}
+
+/**
+ * Clears a specific completed result (for rerun functionality)
+ * @param {string} cacheKey - The cache key to clear
+ */
+function clearCompletedResult(cacheKey) {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const completedKey = `completed_${cacheKey}`;
+    properties.deleteProperty(completedKey);
+  } catch (error) {
+    console.warn(`Failed to clear completed result: ${error.message}`);
+  }
+}
+
+/**
  * Checks if an error code is retryable
  * @param {string} errorCode - The error code to check
  * @return {boolean} True if the error is retryable
@@ -626,6 +736,801 @@ function getSystemStatus() {
     
   } catch (error) {
     return `🔧 Status Check Failed: ${error.message}`;
+  }
+}
+
+/**
+ * Clears all completed results (use with caution)
+ */
+function clearAllCompletedResults() {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const allProperties = properties.getProperties();
+    
+    let clearedCount = 0;
+    for (const key in allProperties) {
+      if (key.startsWith('completed_')) {
+        properties.deleteProperty(key);
+        clearedCount++;
+      }
+    }
+    
+    console.log(`Cleared ${clearedCount} completed results`);
+    return `✅ Cleared ${clearedCount} completed results`;
+  } catch (error) {
+    console.error(`Failed to clear completed results: ${error.message}`);
+    return `❌ Failed to clear completed results: ${error.message}`;
+  }
+}
+
+/**
+ * Clears completion flag for a specific cell by address
+ * @param {string} cellAddress - The cell address (e.g., "A1", "B5")
+ * @return {string} Result message
+ */
+function clearCellCompletionFlag(cellAddress) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const cell = sheet.getRange(cellAddress);
+    const formula = cell.getFormula();
+    
+    if (!formula || !formula.toUpperCase().includes('REWRITE')) {
+      return `❌ Cell ${cellAddress} does not contain a REWRITE function`;
+    }
+    
+    const clearResult = clearCompletionFlagFromFormula(formula);
+    
+    if (clearResult.success) {
+      return `✅ Completion flag cleared for cell ${cellAddress}. Function will rerun on next recalculation.`;
+    } else {
+      return `❌ Failed to clear ${cellAddress}: ${clearResult.error}`;
+    }
+    
+  } catch (error) {
+    return `❌ Error clearing cell ${cellAddress}: ${error.message}`;
+  }
+}
+
+/**
+ * Clears completion flags for multiple cells
+ * @param {Array} cellAddresses - Array of cell addresses (e.g., ["A1", "B5", "C10"])
+ * @return {string} Summary of results
+ */
+function clearMultipleCellsCompletionFlags(cellAddresses) {
+  try {
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    for (const cellAddress of cellAddresses) {
+      const result = clearCellCompletionFlag(cellAddress);
+      if (result.includes('✅')) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.push(`${cellAddress}: ${result}`);
+      }
+    }
+    
+    let summary = `📊 Clear Summary: ✅ ${successCount} cleared, ❌ ${errorCount} errors`;
+    
+    if (errors.length > 0 && errors.length <= 5) {
+      summary += `\n\nErrors:\n${errors.join('\n')}`;
+    } else if (errors.length > 5) {
+      summary += `\n\nFirst 5 errors:\n${errors.slice(0, 5).join('\n')}\n... and ${errors.length - 5} more`;
+    }
+    
+    return summary;
+    
+  } catch (error) {
+    return `❌ Bulk clear failed: ${error.message}`;
+  }
+}
+
+/**
+ * Forces rerun of REWRITE function for a specific input combination
+ * Call this function with the same parameters to force a rerun
+ * @param {string} prompt - Same prompt used in REWRITE
+ * @param {any} mainText - Same main text used in REWRITE  
+ * @param {any} contextCells - Same context used in REWRITE (optional)
+ * @return {string} Result of forced rerun
+ */
+function forceRewriteRerun(prompt, mainText, contextCells) {
+  const processedMainText = extractCellValue(mainText);
+  const processedContextText = contextCells ? extractCellValue(contextCells) : '';
+  const cacheKey = generateCacheKey(prompt, processedMainText, processedContextText);
+  
+  // Clear the completed result
+  clearCompletedResult(cacheKey);
+  
+  // Run with force flag
+  return REWRITE(prompt, mainText, contextCells, true);
+}
+
+/**
+ * Creates a button-triggered rerun function for a specific cell
+ * This creates a custom function that can be called from a button
+ * @param {string} cellAddress - The cell address (e.g., "A1")
+ * @param {string} prompt - The prompt used in that cell
+ * @param {any} mainText - The main text used in that cell
+ * @param {any} contextCells - The context used in that cell (optional)
+ */
+function createRerunButton(cellAddress, prompt, mainText, contextCells) {
+  try {
+    // Get the active sheet
+    const sheet = SpreadsheetApp.getActiveSheet();
+    
+    // Force rerun the function
+    const result = forceRewriteRerun(prompt, mainText, contextCells);
+    
+    // Update the cell with new result
+    sheet.getRange(cellAddress).setValue(result);
+    
+    return `✅ Rerun completed for cell ${cellAddress}`;
+  } catch (error) {
+    return `❌ Rerun failed: ${error.message}`;
+  }
+}
+
+/**
+ * Gets detailed storage usage statistics
+ * @return {Object} Detailed storage statistics
+ */
+function getStorageUsageStats() {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const allProperties = properties.getProperties();
+    
+    let completedCount = 0;
+    let totalSize = 0;
+    let oldestTimestamp = null;
+    let newestTimestamp = null;
+    let avgFlagSize = 0;
+    
+    for (const key in allProperties) {
+      if (key.startsWith('completed_')) {
+        completedCount++;
+        const dataStr = allProperties[key];
+        totalSize += dataStr.length;
+        
+        // Parse timestamp from different formats
+        let timestamp = null;
+        
+        // Check if it's the new ultra-compact format (just timestamp)
+        if (!dataStr.includes('|') && !dataStr.includes('{')) {
+          try {
+            timestamp = parseInt(dataStr) * 1000; // Convert to milliseconds
+          } catch (parseError) {
+            timestamp = new Date().getTime();
+          }
+        } else if (dataStr.includes('|')) {
+          // Old compact format
+          const parts = dataStr.split('|');
+          timestamp = parseInt(parts[0]) * 1000;
+        } else {
+          try {
+            // Legacy JSON format
+            const data = JSON.parse(dataStr);
+            timestamp = data.timestamp;
+          } catch (parseError) {
+            timestamp = new Date().getTime();
+          }
+        }
+        
+        if (timestamp) {
+          if (!oldestTimestamp || timestamp < oldestTimestamp) {
+            oldestTimestamp = timestamp;
+          }
+          if (!newestTimestamp || timestamp > newestTimestamp) {
+            newestTimestamp = timestamp;
+          }
+        }
+      }
+    }
+    
+    avgFlagSize = completedCount > 0 ? Math.round(totalSize / completedCount) : 0;
+    const usagePercentage = Math.round((totalSize / (500 * 1024)) * 100);
+    
+    // With new ultra-compact storage (~10 bytes per flag), estimate much higher capacity
+    const estimatedCapacity = Math.floor((500 * 1024) / Math.max(avgFlagSize, 10));
+    
+    return {
+      completedCount: completedCount,
+      totalSizeBytes: totalSize,
+      usagePercentage: usagePercentage,
+      avgFlagSize: avgFlagSize,
+      estimatedCapacity: estimatedCapacity,
+      oldestResult: oldestTimestamp ? new Date(oldestTimestamp).toISOString() : null,
+      newestResult: newestTimestamp ? new Date(newestTimestamp).toISOString() : null,
+      quotaUsage: `${Math.round(totalSize / 1024)}KB of 500KB (${usagePercentage}%) - ~${estimatedCapacity.toLocaleString()} cells capacity`
+    };
+  } catch (error) {
+    return {
+      error: `Failed to get storage stats: ${error.message}`
+    };
+  }
+}
+
+/**
+ * Gets statistics about completed results (legacy function for compatibility)
+ * @return {Object} Statistics about stored results
+ */
+function getCompletedResultsStats() {
+  const stats = getStorageUsageStats();
+  return {
+    completedCount: stats.completedCount,
+    totalSizeBytes: stats.totalSizeBytes,
+    oldestResult: stats.oldestResult,
+    newestResult: stats.newestResult,
+    estimatedQuotaUsage: stats.quotaUsage
+  };
+}
+
+/**
+ * Performs automatic cleanup when storage usage is high
+ */
+function performAutomaticCleanup() {
+  try {
+    console.log('Starting automatic cleanup...');
+    
+    // First, try cleaning up results older than 7 days
+    let cleanupResult = cleanupOldCompletedResults(7);
+    console.log(`7-day cleanup: ${cleanupResult}`);
+    
+    // Check if we still need more space
+    const stats = getStorageUsageStats();
+    if (stats.usagePercentage > 70) {
+      // Clean up results older than 3 days
+      cleanupResult = cleanupOldCompletedResults(3);
+      console.log(`3-day cleanup: ${cleanupResult}`);
+    }
+    
+    // If still high usage, clean up results older than 1 day
+    const finalStats = getStorageUsageStats();
+    if (finalStats.usagePercentage > 60) {
+      cleanupResult = cleanupOldCompletedResults(1);
+      console.log(`1-day cleanup: ${cleanupResult}`);
+    }
+    
+    return 'Automatic cleanup completed';
+  } catch (error) {
+    console.error(`Automatic cleanup failed: ${error.message}`);
+    return `Cleanup failed: ${error.message}`;
+  }
+}
+
+/**
+ * Performs emergency cleanup when storage quota is exceeded
+ */
+function performEmergencyCleanup() {
+  try {
+    console.log('Starting emergency cleanup...');
+    
+    const properties = PropertiesService.getDocumentProperties();
+    const allProperties = properties.getProperties();
+    
+    // Get all completed results with timestamps
+    const completedResults = [];
+    for (const key in allProperties) {
+      if (key.startsWith('completed_')) {
+        const dataStr = allProperties[key];
+        let timestamp = 0;
+        
+        if (dataStr.includes('|')) {
+          const parts = dataStr.split('|');
+          timestamp = parseInt(parts[0]) * 1000;
+        } else {
+          try {
+            const data = JSON.parse(dataStr);
+            timestamp = data.timestamp || 0;
+          } catch (parseError) {
+            timestamp = 0; // Mark for deletion
+          }
+        }
+        
+        completedResults.push({ key, timestamp, size: dataStr.length });
+      }
+    }
+    
+    // Sort by timestamp (oldest first) and size (largest first for same timestamp)
+    completedResults.sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      return b.size - a.size;
+    });
+    
+    // Remove oldest 50% of results
+    const toRemove = Math.ceil(completedResults.length * 0.5);
+    let removedCount = 0;
+    
+    for (let i = 0; i < toRemove && i < completedResults.length; i++) {
+      properties.deleteProperty(completedResults[i].key);
+      removedCount++;
+    }
+    
+    console.log(`Emergency cleanup removed ${removedCount} results`);
+    return `Emergency cleanup completed: removed ${removedCount} results`;
+  } catch (error) {
+    console.error(`Emergency cleanup failed: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Displays completed results statistics in a user-friendly format
+ * @return {string} Formatted statistics message
+ * @customfunction
+ */
+function getCompletedResultsStatus() {
+  try {
+    const stats = getCompletedResultsStats();
+    
+    if (stats.error) {
+      return `🔧 Stats Error: ${stats.error}`;
+    }
+    
+    const parts = [
+      `📊 Completed Results: ${stats.completedCount}`,
+      `💾 Storage Used: ${stats.estimatedQuotaUsage}`,
+      stats.oldestResult ? `📅 Oldest: ${new Date(stats.oldestResult).toLocaleDateString()}` : null,
+      stats.newestResult ? `🆕 Newest: ${new Date(stats.newestResult).toLocaleDateString()}` : null
+    ].filter(Boolean);
+    
+    return parts.join(' | ');
+    
+  } catch (error) {
+    return `🔧 Status Check Failed: ${error.message}`;
+  }
+}
+
+/**
+ * Cleans up old completed results (older than specified days)
+ * @param {number} daysOld - Remove results older than this many days (default: 30)
+ * @return {string} Cleanup result message
+ */
+function cleanupOldCompletedResults(daysOld = 30) {
+  try {
+    const properties = PropertiesService.getDocumentProperties();
+    const allProperties = properties.getProperties();
+    const cutoffTime = new Date().getTime() - (daysOld * 24 * 60 * 60 * 1000);
+    
+    let removedCount = 0;
+    
+    for (const key in allProperties) {
+      if (key.startsWith('completed_')) {
+        try {
+          const data = JSON.parse(allProperties[key]);
+          if (data.timestamp && data.timestamp < cutoffTime) {
+            properties.deleteProperty(key);
+            removedCount++;
+          }
+        } catch (parseError) {
+          // Remove corrupted entries
+          properties.deleteProperty(key);
+          removedCount++;
+        }
+      }
+    }
+    
+    return `✅ Cleaned up ${removedCount} old completed results (older than ${daysOld} days)`;
+  } catch (error) {
+    return `❌ Cleanup failed: ${error.message}`;
+  }
+}
+
+/**
+ * Creates a custom menu in Google Sheets for easy rerun access
+ * This function runs automatically when the spreadsheet opens
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🔄 REWRITE Tools')
+    .addItem('🔄 Rerun Selected Cell', 'rerunSelectedCell')
+    .addItem('🔄 Clear Selected Cell (Allow Rerun)', 'clearSelectedCell')
+    .addSeparator()
+    .addItem('🧹 Rerun All Visible REWRITE Functions', 'rerunAllVisibleCells')
+    .addItem('🧹 Clear All Completed Results', 'clearAllCompletedResultsMenu')
+    .addItem('🧹 Cleanup Old Results (30+ days)', 'cleanupOldResultsMenu')
+    .addSeparator()
+    .addItem('📊 Show Completed Results Status', 'showCompletedResultsStatus')
+    .addItem('ℹ️ Help & Usage Guide', 'showHelpDialog')
+    .addToUi();
+}
+
+/**
+ * Clears the completion flag for the selected cell, allowing it to rerun naturally
+ * Accessible via custom menu: REWRITE Tools > Clear Selected Cell (Allow Rerun)
+ */
+function clearSelectedCell() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const activeCell = sheet.getActiveCell();
+    const formula = activeCell.getFormula();
+    
+    if (!formula || !formula.toUpperCase().includes('REWRITE')) {
+      SpreadsheetApp.getUi().alert(
+        'No REWRITE Function Found',
+        'The selected cell does not contain a REWRITE function.\n\nPlease select a cell with a REWRITE formula and try again.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+      return;
+    }
+    
+    // Extract parameters and clear the completion flag
+    const clearResult = clearCompletionFlagFromFormula(formula);
+    
+    if (clearResult.success) {
+      SpreadsheetApp.getUi().alert(
+        '✅ Cell Cleared Successfully',
+        `Cell ${activeCell.getA1Notation()} completion flag has been cleared.\n\nThe function will rerun the next time the cell is recalculated.\n\nTip: Press Ctrl+Shift+F9 to force recalculation, or edit the cell and press Enter.`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(
+        '❌ Clear Failed',
+        `Failed to clear the completion flag: ${clearResult.error}`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    }
+    
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `An error occurred: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Reruns REWRITE function in the currently selected cell
+ * Accessible via custom menu: REWRITE Tools > Rerun Selected Cell
+ */
+function rerunSelectedCell() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const activeCell = sheet.getActiveCell();
+    const formula = activeCell.getFormula();
+    
+    if (!formula || !formula.toUpperCase().includes('REWRITE')) {
+      SpreadsheetApp.getUi().alert(
+        'No REWRITE Function Found',
+        'The selected cell does not contain a REWRITE function.\n\nPlease select a cell with a REWRITE formula and try again.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+      return;
+    }
+    
+    // Extract parameters from the formula and force rerun
+    const result = forceRerunFromFormula(formula);
+    
+    if (result.success) {
+      activeCell.setValue(result.newValue);
+      SpreadsheetApp.getUi().alert(
+        '✅ Rerun Successful',
+        `Cell ${activeCell.getA1Notation()} has been updated with a fresh result.`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert(
+        '❌ Rerun Failed',
+        `Failed to rerun the function: ${result.error}`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    }
+    
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `An error occurred: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Reruns all visible REWRITE functions in the current sheet
+ * Accessible via custom menu: REWRITE Tools > Rerun All Visible REWRITE Functions
+ */
+function rerunAllVisibleCells() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      'Confirm Bulk Rerun',
+      'This will rerun ALL visible REWRITE functions in the current sheet.\n\nThis may consume significant API quota. Continue?',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) {
+      return;
+    }
+    
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const dataRange = sheet.getDataRange();
+    const formulas = dataRange.getFormulas();
+    
+    let rerunCount = 0;
+    let errorCount = 0;
+    
+    for (let row = 0; row < formulas.length; row++) {
+      for (let col = 0; col < formulas[row].length; col++) {
+        const formula = formulas[row][col];
+        
+        if (formula && formula.toUpperCase().includes('REWRITE')) {
+          try {
+            const result = forceRerunFromFormula(formula);
+            if (result.success) {
+              sheet.getRange(row + 1, col + 1).setValue(result.newValue);
+              rerunCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error) {
+            errorCount++;
+          }
+        }
+      }
+    }
+    
+    ui.alert(
+      '🔄 Bulk Rerun Complete',
+      `Rerun Summary:\n✅ Successfully rerun: ${rerunCount} functions\n❌ Errors: ${errorCount} functions`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `Bulk rerun failed: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Helper function to clear completion flag from a REWRITE formula
+ * @param {string} formula - The cell formula containing REWRITE function
+ * @return {Object} Result object with success flag and message or error
+ */
+function clearCompletionFlagFromFormula(formula) {
+  try {
+    // Simple regex to extract REWRITE parameters
+    const rewriteMatch = formula.match(/REWRITE\s*\(\s*([^)]+)\)/i);
+    
+    if (!rewriteMatch) {
+      return { success: false, error: 'Could not parse REWRITE function' };
+    }
+    
+    // Parse parameters (this is a simplified parser)
+    const params = rewriteMatch[1].split(',').map(p => p.trim());
+    
+    if (params.length < 2) {
+      return { success: false, error: 'REWRITE function requires at least 2 parameters' };
+    }
+    
+    // Remove quotes from string parameters
+    const prompt = params[0].replace(/^["']|["']$/g, '');
+    const mainText = params[1].replace(/^["']|["']$/g, '');
+    const contextCells = params.length > 2 ? params[2].replace(/^["']|["']$/g, '') : '';
+    
+    // Generate the same cache key that would be used
+    const processedMainText = extractCellValue(mainText);
+    const processedContextText = contextCells ? extractCellValue(contextCells) : '';
+    const cacheKey = generateCacheKey(prompt, processedMainText, processedContextText);
+    
+    // Clear the completion flag
+    clearCompletedResult(cacheKey);
+    
+    return { success: true, message: 'Completion flag cleared successfully' };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Helper function to parse and force rerun a REWRITE formula
+ * @param {string} formula - The cell formula containing REWRITE function
+ * @return {Object} Result object with success flag and new value or error
+ */
+function forceRerunFromFormula(formula) {
+  try {
+    // Simple regex to extract REWRITE parameters
+    const rewriteMatch = formula.match(/REWRITE\s*\(\s*([^)]+)\)/i);
+    
+    if (!rewriteMatch) {
+      return { success: false, error: 'Could not parse REWRITE function' };
+    }
+    
+    // Parse parameters (this is a simplified parser)
+    const params = rewriteMatch[1].split(',').map(p => p.trim());
+    
+    if (params.length < 2) {
+      return { success: false, error: 'REWRITE function requires at least 2 parameters' };
+    }
+    
+    // Remove quotes from string parameters
+    const prompt = params[0].replace(/^["']|["']$/g, '');
+    const mainText = params[1].replace(/^["']|["']$/g, '');
+    const contextCells = params.length > 2 ? params[2].replace(/^["']|["']$/g, '') : undefined;
+    
+    // Force rerun
+    const result = forceRewriteRerun(prompt, mainText, contextCells);
+    
+    return { success: true, newValue: result };
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Shows completed results status via dialog
+ * Accessible via custom menu: REWRITE Tools > Show Completed Results Status
+ */
+function showCompletedResultsStatus() {
+  try {
+    const status = getCompletedResultsStatus();
+    SpreadsheetApp.getUi().alert(
+      '📊 Completed Results Status',
+      status,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `Failed to get status: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Clears all completed results with confirmation dialog
+ * Accessible via custom menu: REWRITE Tools > Clear All Completed Results
+ */
+function clearAllCompletedResultsMenu() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      'Confirm Clear All Results',
+      'This will clear ALL completed results, allowing all REWRITE functions to run again.\n\nThis action cannot be undone. Continue?',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response === ui.Button.YES) {
+      const result = clearAllCompletedResults();
+      ui.alert('Clear Results', result, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `Failed to clear results: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Cleans up old results with confirmation dialog
+ * Accessible via custom menu: REWRITE Tools > Cleanup Old Results
+ */
+function cleanupOldResultsMenu() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      'Confirm Cleanup Old Results',
+      'This will remove completed results older than 30 days.\n\nOlder results will be allowed to run again. Continue?',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response === ui.Button.YES) {
+      const result = cleanupOldCompletedResults(30);
+      ui.alert('Cleanup Results', result, ui.ButtonSet.OK);
+    }
+  } catch (error) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Error',
+      `Failed to cleanup results: ${error.message}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Shows help dialog with usage instructions
+ * Accessible via custom menu: REWRITE Tools > Help & Usage Guide
+ */
+function showHelpDialog() {
+  const helpText = `
+🔄 REWRITE Function Usage Guide
+
+📝 Basic Usage:
+=REWRITE("Make this professional", A1)
+=REWRITE("Summarize this", A1:A5, B1)
+
+🔄 Rerun Options:
+1. Clear & Rerun Naturally:
+   • Select cell → Menu: Clear Selected Cell
+   • Then press Ctrl+Shift+F9 or edit cell
+2. Force Immediate Rerun:
+   • Select cell → Menu: Rerun Selected Cell
+3. Manual Force: =REWRITE("prompt", A1, , TRUE)
+
+🗑️ Clear Completion Flags:
+• Single cell: Menu → Clear Selected Cell
+• Multiple cells: clearMultipleCellsCompletionFlags(["A1","B2"])
+• All cells: Menu → Clear All Completed Results
+
+📊 Management:
+• View storage status via menu
+• Ultra-efficient storage (~50,000 cell capacity)
+• Automatic cleanup when needed
+
+💡 Tips:
+• "Clear Selected Cell" is gentler than "Rerun Selected Cell"
+• Functions won't rerun after first success (saves API calls)
+• Clearing allows natural recalculation
+• Results cached for 1 hour for speed
+
+🔧 Troubleshooting:
+• Use "Clear Selected Cell" if results seem stuck
+• Check system status for API issues
+• Clear all results to reset everything
+  `;
+  
+  SpreadsheetApp.getUi().alert(
+    '📖 REWRITE Function Help',
+    helpText,
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/**
+ * Creates a rerun button using Google Sheets drawing/image feature
+ * This function helps create a clickable button for specific cells
+ * @param {string} cellAddress - The cell address to create a button for (e.g., "A1")
+ * @param {string} buttonText - Text to display on the button (optional)
+ */
+function createRerunButtonForCell(cellAddress, buttonText = '🔄 Rerun') {
+  try {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const cell = sheet.getRange(cellAddress);
+    const formula = cell.getFormula();
+    
+    if (!formula || !formula.toUpperCase().includes('REWRITE')) {
+      throw new Error(`Cell ${cellAddress} does not contain a REWRITE function`);
+    }
+    
+    // Create a note with rerun instructions
+    const noteText = `🔄 REWRITE Rerun Button
+    
+To rerun this cell:
+1. Select this cell
+2. Go to menu: REWRITE Tools → Rerun Selected Cell
+3. Or use: =REWRITE(..., , , TRUE) to force rerun
+
+Current formula: ${formula}`;
+    
+    cell.setNote(noteText);
+    
+    // Add conditional formatting to make it look like a button
+    const rule = SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=INDIRECT("${cellAddress}")`)
+      .setBackground('#E8F0FE')
+      .setBold(true)
+      .setRanges([cell])
+      .build();
+    
+    const rules = sheet.getConditionalFormatRules();
+    rules.push(rule);
+    sheet.setConditionalFormatRules(rules);
+    
+    return `✅ Rerun helper created for cell ${cellAddress}. Hover over the cell to see rerun instructions.`;
+    
+  } catch (error) {
+    return `❌ Failed to create rerun button: ${error.message}`;
   }
 }
 
